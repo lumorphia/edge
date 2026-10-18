@@ -1,0 +1,11 @@
+# 入口のデプロイ (ADR-0001、docs/runbook/deploy.md)。doco-cd は doco-cd/compose.yaml で edge 専用に立てる。
+# main をポーリングし、compose.yaml の変更か、イメージ (latest) の digest の変化があれば docker compose up する。
+# Caddyfile はイメージに入っているので、CI が新しいイメージを出せば入れ替わる
+name: edge
+reference: main
+compose_files:
+  - compose.yaml
+force_image_pull: true
+prune_images: true
+remove_orphans: false
+timeout: 300
