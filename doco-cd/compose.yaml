@@ -1,0 +1,46 @@
+# doco-cd (ADR-0001、docs/runbook/deploy.md): edge の main をポーリングし、.doco-cd.yml に従って compose.yaml を入れ替える。
+# 各サービスの doco-cd とは別のコンテナにする。VPS で手で起動する。
+#
+#   docker compose -f ~/srv/doco-cd-edge/compose.yaml up -d
+#
+# 「ホスト」と書いたパスは、VPS で実際に置いた場所に書き換える。「コンテナの中」と書いたパスは書き換えない。
+# 外から入る口は作らない (ports を出さず、WEBHOOK_SECRET / API_SECRET を設定しない)。ポーリングで外へ見に行くだけ。
+# docker.sock を渡すので、doco-cd は Docker を完全に操作できる。版は固定し、Renovate の PR で上げる
+
+services:
+  doco-cd-edge:
+    container_name: doco-cd-edge
+    image: ghcr.io/kimdre/doco-cd:0.123.0
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+      LOG_LEVEL: info
+      PASS_ENV: "true"
+      # 証明書は Docker 本体が Caddy にマウントするので、ホストのパス
+      EDGE_CERTS_DIR: /srv/edge/certs # ホスト
+      # public リポジトリなので clone に token は要らない
+      POLL_CONFIG: |
+        - url: https://github.com/lumorphia/edge.git
+          reference: main
+          interval: 5m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # GHCR の認証 (read:packages の PAT で作った config.json)。各サービスの doco-cd と同じものでよい。左 (ホスト) を書き換える
+      - /srv/doco-cd/docker-config.json:/root/.docker/config.json:ro
+      - data:/data
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "/doco-cd", "healthcheck"]
+      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
