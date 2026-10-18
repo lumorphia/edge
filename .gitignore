@@ -1,0 +1,6 @@
+*:Zone.Identifier
+.env
+.env.*
+# Origin CA の証明書は VPS にだけ置く。CI の仮の証明書も入れない
+certs/
+.ci-certs/
