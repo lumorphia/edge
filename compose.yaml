@@ -1,0 +1,32 @@
+# Lumorphia の入口 (ADR-0001、docs/runbook/deploy.md)。Caddy だけを動かし、どのサービスの起動も待たない。
+# どれかのサービスが落ちても、そのドメインが 502 になるだけで、ほかのドメインは止まらない
+name: edge
+
+services:
+  caddy:
+    # main の Caddyfile を入れたイメージ。CI が main への push で作り、latest を付ける (ADR-0001)
+    image: ghcr.io/lumorphia/edge-caddy:${EDGE_TAG:-latest}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Cloudflare Origin CA の証明書 (origin.pem と origin.key)。VPS にだけ置き、Git に入れない。ホストの絶対パスで渡す
+      - ${EDGE_CERTS_DIR:?EDGE_CERTS_DIR is required}:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  # 各サービスの web がここに固有の別名で出る (docker network create lumorphia-edge で作ったもの)
+  edge:
+    external: true
+    name: lumorphia-edge
+volumes:
+  caddy_data:
+  caddy_config:
