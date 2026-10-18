@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>lumorphia/platform//renovate/default"],
+  "description": "Caddy (Dockerfile) と doco-cd、GitHub Actions の版を上げる。Caddy は main に入るとすぐ本番に当たる"
+}
