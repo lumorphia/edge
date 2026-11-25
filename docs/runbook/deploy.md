@@ -38,3 +38,14 @@ env を変えたら doco-cd を作り直す (起動したときの値を使う)�
 ## 5. 戻し方
 
 前のイメージに戻すときは、`EDGE_TAG=sha-<戻したいコミット>` を doco-cd の environment に足して doco-cd を作り直す。直したものが main に入ったら外して、もう一度作り直す。急ぐときは `docker compose -p edge -f ~/srv/edge/compose.yaml` で手で入れ替えてもよい (doco-cd が次の回に main の状態へ戻すので、先に doco-cd を止める)。
+
+## 6. アクセスログを見る
+
+全サイトのアクセスログは、Caddy のボリューム `caddy_logs` の `access.log` に 1 行 1 件の JSON で残る ([ADR-0002](../adr/0002-access-log.md))。1 日ごとに分かれ (`access-<日時>.log`)、30 日を過ぎたものは Caddy が消す。利用者の IP は `request.client_ip` (`request.remote_ip` は Cloudflare の IP)。
+
+```sh
+docker exec edge-caddy-1 ls -l /var/log/caddy
+docker exec edge-caddy-1 tail -n 20 /var/log/caddy/access.log
+```
+
+ログには利用者の IP が入る。会話や Issue に貼るときは IP を伏せる。ポリシーに書いた目的 (不正なアクセスへの対応、障害の調査、法令に基づく要請への対応) 以外に使わない。

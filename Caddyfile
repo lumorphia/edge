@@ -7,32 +7,78 @@
 # - 80/443 は Cloudflare の IP からだけ受ける。直接届く経路を塞がないと、各サービスが信じる
 #   CF-Connecting-IP (CLIENT_IP_HEADER) を偽装できてしまう
 # - Cloudflare の IP 一覧: https://www.cloudflare.com/ips/ (2026-09-20 取得。変わったら docs/runbook/cloudflare-ips.md の手順で更新する)
+#   一覧は trusted_proxies と cloudflare_only の 2 か所にある。同じであることを test/access-log.sh が確かめる
+#
+# アクセスログ (ADR-0002): 利用者の IP (CF-Connecting-IP) を残し、30 日で消す。
+# Cookie・認証ヘッダー・Referer・クエリ文字列は残さない。各サービスのプライバシーポリシーに書いてある
+{
+	servers {
+		# Cloudflare から届いた要求だけ、CF-Connecting-IP を利用者の IP (client_ip) として信じる。
+		# remote_ip の照合 (cloudflare_only) は直接つないできた相手の IP のままなので影響しない
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers Cf-Connecting-Ip
+	}
+}
 
 (cloudflare_only) {
 	@direct not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
 	respond @direct 403
 }
 
+(access_log) {
+	log_append user_agent {http.request.header.User-Agent}
+	log {
+		# ボリューム caddy_logs。1 日ごとにファイルを分け、30 日 (720h) を過ぎたものを消す。
+		# roll_keep は日数より先に効かないよう多めにする (混んだ日は大きさでも分かれる)
+		output file /var/log/caddy/access.log {
+			roll_interval 24h
+			roll_keep_for 720h
+			roll_keep 200
+		}
+		format filter {
+			request>headers delete
+			request>tls delete
+			request>remote_port delete
+			resp_headers delete
+			request>uri regexp \?.*$ ""
+		}
+	}
+}
+
 (lumorphia_site) {
 	import cloudflare_only
+	import access_log
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 	encode zstd gzip
+}
+
+# 上流へは、直接つないできた Cloudflare の IP だけを X-Forwarded-For で渡す。trusted_proxies を設定すると
+# Caddy は届いた X-Forwarded-For (利用者が自由に書ける) に足して渡すため、各サービスの req.ip を偽装できてしまう。
+# 利用者の IP は各サービスが CF-Connecting-IP (CLIENT_IP_HEADER) で読む
+(upstream_headers) {
+	header_up X-Forwarded-For {remote_host}
 }
 
 # lumorphia/prismtone
 prismtone.lumorphia.com {
 	import lumorphia_site
-	reverse_proxy prismtone-web:3000
+	reverse_proxy prismtone-web:3000 {
+		import upstream_headers
+	}
 }
 
 # lumorphia/accounts
 accounts.lumorphia.com {
 	import lumorphia_site
-	reverse_proxy accounts-web:3100
+	reverse_proxy accounts-web:3100 {
+		import upstream_headers
+	}
 }
 
 # lumorphia/scenote (公開前は Cloudflare Access の内側。上流が起動するまでは 502)
 scenote.lumorphia.com {
 	import lumorphia_site
-	reverse_proxy scenote-web:3200
+	reverse_proxy scenote-web:3200 {
+		import upstream_headers
+	}
 }

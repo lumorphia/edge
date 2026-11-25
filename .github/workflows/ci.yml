@@ -35,6 +35,8 @@ jobs:
             caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Caddyfile の書式
         run: docker run --rm edge-caddy:ci caddy fmt /etc/caddy/Caddyfile | diff -u Caddyfile -
+      - name: アクセスログ (IP の取り方と、残さないもの)
+        run: test/access-log.sh
       - name: compose の構文
         run: |
           docker network create lumorphia-edge
