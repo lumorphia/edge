@@ -14,6 +14,8 @@ services:
       - ${EDGE_CERTS_DIR:?EDGE_CERTS_DIR is required}:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
+      # アクセスログ (ADR-0002)。Caddy が 1 日ごとに分け、30 日で消す
+      - caddy_logs:/var/log/caddy
     networks: [edge]
     restart: unless-stopped
     logging:
@@ -30,3 +32,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  caddy_logs:
